@@ -19,18 +19,64 @@ export class AppComponent implements OnInit {
   messages: any[] = [];
 
   // --- UI State Variables ---
-  isMenuVisible = false;      // Message context menu
-  isHeaderMenuOpen = false;   // 3-dot header menu
-  isEmojiPickerOpen = false;  // Emoji panel
+  isMenuVisible = false;      
+  isHeaderMenuOpen = false;   
+  isEmojiPickerOpen = false;  
+  isAboutModalOpen = false;   // NEW: For Group Info/About
   menuX = 0;
   menuY = 0;
   selectedMessage: any = null;
+
+  // NEW: Mock data for Group Members
+  groupMembers = [
+    { name: 'You', status: 'Online' },
+    { name: 'John Doe', status: 'Away' },
+    { name: 'Jane Smith', status: 'Online' },
+    { name: 'Alice Johnson', status: 'Offline' }
+  ];
 
   ngOnInit() {
     this.connect();
   }
 
-  // --- 1. Message Logic (Timestamps & Sending) ---
+  // --- Header Actions Update ---
+  toggleHeaderMenu() {
+    this.isHeaderMenuOpen = !this.isHeaderMenuOpen;
+  }
+
+  performHeaderAction(action: string) {
+    if (action === 'About') {
+      this.isAboutModalOpen = true; // Open the info modal
+    } else if (action === 'Search') {
+      alert("Search feature coming soon!");
+    } else if (action === 'Starred Text') {
+      alert("No starred messages yet.");
+    }
+    this.isHeaderMenuOpen = false;
+  }
+
+  // --- Global Click Listener Update ---
+  @HostListener('document:click', ['$event'])
+  closeMenus(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+
+    if (!target.closest('.context-menu')) this.isMenuVisible = false;
+    
+    // Close 3-dot menu if clicking outside
+    if (!target.closest('.header-options')) this.isHeaderMenuOpen = false;
+
+    // Close emoji picker if clicking outside
+    if (!target.closest('.emoji-picker') && !target.closest('.icon-btn')) {
+      this.isEmojiPickerOpen = false;
+    }
+
+    // NEW: Close About Modal if clicking the backdrop (overlay)
+    if (target.classList.contains('modal-overlay')) {
+      this.isAboutModalOpen = false;
+    }
+  }
+
+  // --- Rest of your existing logic (sendMessage, connect, etc.) ---
   sendMessage() {
     if (this.newMessage && this.newMessage.trim() !== "") {
       const now = new Date();
@@ -40,57 +86,34 @@ export class AppComponent implements OnInit {
         type: 'CHAT',
         messageClass: 'my-message',
         time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isEditing: false // Track if this specific message is being edited
+        isEditing: false
       });
-
       this.newMessage = ''; 
       this.scrollToBottom();
       this.isEmojiPickerOpen = false;
     }
   }
 
-  // --- 2. Inline Editing Logic ---
   startInlineEdit(msg: any) {
     msg.isEditing = true;
-    this.isMenuVisible = false; // Hide context menu
+    this.isMenuVisible = false;
   }
 
   saveInlineEdit(msg: any, newContent: string) {
-    if (newContent.trim() !== "") {
-      msg.content = newContent;
-    }
+    if (newContent.trim() !== "") msg.content = newContent;
     msg.isEditing = false;
   }
 
-  cancelEdit(msg: any) {
-    msg.isEditing = false;
-  }
-
-  // --- 3. Header & 3-Dot Menu Actions ---
-  toggleHeaderMenu() {
-    this.isHeaderMenuOpen = !this.isHeaderMenuOpen;
-  }
+  cancelEdit(msg: any) { msg.isEditing = false; }
 
   clearChat() {
     this.messages = [];
     this.isHeaderMenuOpen = false;
   }
 
-  // These can be expanded later with search logic or backend calls
-  performHeaderAction(action: string) {
-    console.log(`Action performed: ${action}`);
-    alert(`${action} feature clicked!`);
-    this.isHeaderMenuOpen = false;
-  }
+  addEmoji(emoji: string) { this.newMessage += emoji; }
 
-  // --- 4. Emoji, File & Camera Logic ---
-  addEmoji(emoji: string) {
-    this.newMessage += emoji;
-  }
-
-  triggerFileSelect() {
-    document.getElementById('fileInput')?.click();
-  }
+  triggerFileSelect() { document.getElementById('fileInput')?.click(); }
 
   onFileSelected(event: any) {
     const file = event.target.files[0];
@@ -111,16 +134,11 @@ export class AppComponent implements OnInit {
   async openCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      alert("Camera accessed successfully! (Viewfinder would show here in production)");
-      // Stop the camera stream after testing access
+      alert("Camera accessed!");
       stream.getTracks().forEach(track => track.stop());
-    } catch (err) {
-      console.error("Camera error:", err);
-      alert("Could not access camera. Please check permissions.");
-    }
+    } catch (err) { alert("Camera error."); }
   }
 
-  // --- Context Menu & Global Listeners ---
   openContextMenu(event: MouseEvent, msg: any) {
     event.preventDefault();
     this.isMenuVisible = true;
@@ -129,36 +147,21 @@ export class AppComponent implements OnInit {
     this.selectedMessage = msg;
   }
 
-  @HostListener('document:click')
-  closeMenus() {
-    this.isMenuVisible = false;
-    this.isHeaderMenuOpen = false;
-    // We don't close emoji picker here so user can click multiple emojis
-  }
-
   deleteMsg() {
     this.messages = this.messages.filter(m => m !== this.selectedMessage);
     this.isMenuVisible = false;
   }
 
-  // --- WebSocket & Utils ---
   connect() {
     const socket = new (SockJS as any)('http://localhost:8080/ws'); 
     this.stompClient = Stomp.over(socket);
-    this.stompClient.connect({}, 
-      () => this.onConnected(), 
-      (err: any) => this.onError(err)
-    );
+    this.stompClient.connect({}, () => this.onConnected(), (err: any) => console.error(err));
   }
 
   onConnected() {
-    this.stompClient?.subscribe('/topic/public-chat', (payload: IMessage) => {
-      this.onMessageReceived(payload);
-    });
+    this.stompClient?.subscribe('/topic/public-chat', (payload: IMessage) => this.onMessageReceived(payload));
     this.stompClient?.send("/app/chat.addUser", {}, JSON.stringify({ sender: this.username, type: 'JOIN' }));
   }
-
-  onError(error: any) { console.error("WebSocket Error", error); }
 
   onMessageReceived(payload: any) {
     const message = JSON.parse(payload.body);
