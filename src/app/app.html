@@ -1,51 +1,174 @@
 <div class="chat-container">
+  <!-- HEADER -->
   <div class="chat-header">
     <div class="header-content" (click)="performHeaderAction('About')">
       <img src="https://ui-avatars.com/api/?name=Public+Group&background=00a884&color=fff" alt="Profile" class="profile-pic">
       <div class="header-text">
         <h3 class="group-name">{{ chatPartner }}</h3>
-        <p class="header-subtext">You, John Doe, Jane Smith...</p>
+        <p class="header-subtext" *ngIf="typingUsers.length === 0">You, John Doe, Jane Smith...</p>
+        <p class="header-subtext typing-indicator" *ngIf="typingUsers.length > 0">
+          {{ typingUsers[0] }} is typing<span class="typing-dots">...</span>
+        </p>
       </div>
     </div>
     
     <div class="header-options">
+      <button class="icon-btn search-btn" (click)="performHeaderAction('Search'); $event.stopPropagation()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.35-4.35"></path>
+        </svg>
+      </button>
       <button class="three-dots-btn" (click)="toggleHeaderMenu(); $event.stopPropagation()">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 15z"/></svg>
       </button>
       <div *ngIf="isHeaderMenuOpen" class="dropdown-menu" (click)="$event.stopPropagation()">
         <div class="menu-item" (click)="performHeaderAction('About')">About</div>
-        <div class="menu-item" (click)="performHeaderAction('Search')">Search</div>
+        <div class="menu-item" (click)="performHeaderAction('Starred')">Starred Messages</div>
         <div class="menu-item" (click)="performHeaderAction('Clear Chat')">Clear Chat</div>
       </div>
     </div>
   </div>
 
-  <div id="messageArea" class="message-area">
-    <div *ngFor="let msg of messages" [ngClass]="msg.messageClass" (contextmenu)="openContextMenu($event, msg)">
-      <div class="message-bubble">
-        <input *ngIf="msg.isEditing" 
-               class="inline-edit-input"
-               [(ngModel)]="msg.content" 
-               (keyup.enter)="saveInlineEdit(msg, msg.content)"
-               (blur)="saveInlineEdit(msg, msg.content)"
-               autoFocus>
-        
-        <div *ngIf="!msg.isEditing" class="message-content">{{ msg.content }}</div>
-        <div class="message-meta">
-          <span class="message-time">{{ msg.time }}</span>
-        </div>
-      </div>
-    </div>
+  <!-- SEARCH BAR -->
+  <div class="search-bar" *ngIf="isSearchOpen">
+    <input type="text" [(ngModel)]="searchQuery" placeholder="Search messages..." class="search-input">
+    <button class="close-search" (click)="isSearchOpen = false">×</button>
   </div>
 
-  <!-- Context Menu for Right Click -->
+  <!-- MESSAGE AREA -->
+  <div #messageArea id="messageArea" class="message-area" (scroll)="onScroll($event)">
+    <ng-container *ngFor="let msg of filteredMessages; let i = index">
+      <!-- Date Separator -->
+      <div class="date-separator" *ngIf="shouldShowDateSeparator(i)">
+        <span>{{ getDateLabel(msg.date) }}</span>
+      </div>
+
+      <!-- Message -->
+      <div [ngClass]="msg.messageClass" (contextmenu)="openContextMenu($event, msg)">
+        <!-- Profile pic for received messages -->
+        <img *ngIf="msg.messageClass === 'other-message'" 
+             [src]="getSenderAvatar(msg.sender)" 
+             class="message-avatar">
+        
+        <div class="message-bubble">
+          <!-- Forwarded Label -->
+          <div *ngIf="msg.isForwarded" class="forwarded-label">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
+            </svg>
+            Forwarded
+          </div>
+
+          <!-- Reply Reference -->
+          <div *ngIf="msg.replyTo" class="reply-reference">
+            <div class="reply-line"></div>
+            <div class="reply-content">
+              <p class="reply-sender">{{ msg.replyTo.sender }}</p>
+              <p class="reply-text">{{ msg.replyTo.content }}</p>
+            </div>
+          </div>
+
+          <!-- Sender name for group messages -->
+          <div *ngIf="msg.messageClass === 'other-message' && msg.type !== 'JOIN'" class="sender-name">
+            {{ msg.sender }}
+          </div>
+
+          <!-- Media Content -->
+          <div *ngIf="msg.mediaUrl && msg.mediaType === 'image'" class="media-content">
+            <img [src]="msg.mediaUrl" alt="Image" class="message-image">
+          </div>
+
+          <!-- Voice Message -->
+          <div *ngIf="msg.isVoiceMessage" class="voice-message">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+            <div class="voice-waveform">
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <span class="voice-duration">{{ msg.voiceDuration }}</span>
+          </div>
+
+          <!-- Text Content -->
+          <input *ngIf="msg.isEditing" 
+                 class="inline-edit-input"
+                 [(ngModel)]="msg.content" 
+                 (keyup.enter)="saveInlineEdit(msg, msg.content)"
+                 (blur)="saveInlineEdit(msg, msg.content)"
+                 autoFocus>
+          
+          <div *ngIf="!msg.isEditing && !msg.isVoiceMessage" class="message-content">
+            {{ msg.content }}
+          </div>
+
+          <!-- Reactions -->
+          <div *ngIf="getReactionKeys(msg.reactions).length > 0" class="message-reactions">
+            <span *ngFor="let emoji of getReactionKeys(msg.reactions)" 
+                  class="reaction-bubble"
+                  [class.my-reaction]="msg.reactions![emoji].includes(username)"
+                  (click)="addReaction(msg, emoji)">
+              {{ emoji }} {{ msg.reactions![emoji].length }}
+            </span>
+          </div>
+
+          <!-- Message Meta (Time + Status) -->
+          <div class="message-meta">
+            <span *ngIf="msg.isStarred" class="star-icon">⭐</span>
+            <span class="message-time">{{ msg.time }}</span>
+            <span *ngIf="msg.messageClass === 'my-message'" class="message-status">
+              <svg *ngIf="msg.status === 'sent'" viewBox="0 0 16 15" width="16" height="15">
+                <path fill="currentColor" d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512z"/>
+              </svg>
+              <svg *ngIf="msg.status === 'delivered'" viewBox="0 0 16 15" width="16" height="15">
+                <path fill="currentColor" d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512z"/>
+                <path fill="currentColor" d="M12.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L5.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512z"/>
+              </svg>
+              <svg *ngIf="msg.status === 'read'" viewBox="0 0 16 15" width="16" height="15" class="read-status">
+                <path fill="#53bdeb" d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512z"/>
+                <path fill="#53bdeb" d="M12.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L5.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512z"/>
+              </svg>
+            </span>
+          </div>
+
+          <!-- Message Tail -->
+          <div class="message-tail" [class.my-tail]="msg.messageClass === 'my-message'"></div>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+
+  <!-- Scroll to Bottom Button -->
+  <button *ngIf="showScrollButton" class="scroll-to-bottom" (click)="scrollToBottom()">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="white">
+      <path d="M7 10l5 5 5-5z"/>
+    </svg>
+  </button>
+
+  <!-- Context Menu -->
   <div *ngIf="isMenuVisible" 
        class="context-menu" 
        [style.left.px]="menuX" 
        [style.top.px]="menuY"
        (click)="$event.stopPropagation()">
-    <div class="menu-item" (click)="startInlineEdit(selectedMessage)">Edit Message</div>
-    <div class="menu-item delete-option" (click)="triggerDeleteConfirm()">Delete Message</div>
+    <div class="menu-item" (click)="replyToMessage(selectedMessage)">Reply</div>
+    <div class="menu-item" (click)="openReactionPicker(selectedMessage)">React</div>
+    <div class="menu-item" (click)="forwardMessage(selectedMessage)">Forward</div>
+    <div class="menu-item" (click)="toggleStar(selectedMessage)">
+      {{ selectedMessage?.isStarred ? 'Unstar' : 'Star' }}
+    </div>
+    <div class="menu-item" (click)="startInlineEdit(selectedMessage)">Edit</div>
+    <div class="menu-item delete-option" (click)="triggerDeleteConfirm()">Delete</div>
+  </div>
+
+  <!-- Reaction Picker -->
+  <div *ngIf="isReactionPickerOpen" class="reaction-picker" (click)="$event.stopPropagation()">
+    <span *ngFor="let emoji of reactionEmojis" 
+          class="reaction-emoji" 
+          (click)="addReaction(selectedMessage, emoji)">
+      {{ emoji }}
+    </span>
   </div>
 
   <!-- Emoji Picker -->
@@ -53,6 +176,15 @@
     <div class="emoji-grid">
       <span *ngFor="let emoji of emojis" class="emoji-item" (click)="addEmoji(emoji)">{{ emoji }}</span>
     </div>
+  </div>
+
+  <!-- Reply Preview Bar -->
+  <div *ngIf="replyingTo" class="reply-preview-bar">
+    <div class="reply-preview-content">
+      <span class="reply-preview-label">Replying to {{ replyingTo.sender }}</span>
+      <p class="reply-preview-text">{{ replyingTo.content }}</p>
+    </div>
+    <button class="cancel-reply" (click)="cancelReply()">×</button>
   </div>
 
   <!-- Message Input Area -->
@@ -69,14 +201,20 @@
           <button class="action-icon attach-btn" (click)="triggerFileSelect()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path></svg>
           </button>
-          <input type="file" id="fileInput" style="display: none;" (change)="handleFileSelect($event)">
+          <input type="file" id="fileInput" style="display: none;" (change)="handleFileSelect($event)" accept="image/*,video/*">
           <button class="action-icon camera-btn" (click)="openCamera()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
           </button>
         </div>
       </div>
-      <button id="sendButton" (click)="sendMessage()">
+      <button id="sendButton" *ngIf="newMessage.trim()" (click)="sendMessage()">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+      </button>
+      <button id="voiceButton" *ngIf="!newMessage.trim()" class="voice-btn" (click)="startVoiceRecording()">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="white">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
       </button>
     </div>
   </div>
@@ -86,10 +224,10 @@
 <div *ngIf="isDeleteModalOpen" class="modal-overlay" (click)="isDeleteModalOpen = false">
   <div class="confirm-modal" (click)="$event.stopPropagation()">
     <div class="modal-body">
-      <p>Do you want to delete the message?</p>
+      <p>Delete message?</p>
       <div class="modal-actions">
-        <button class="btn-secondary" (click)="cancelDelete()">No</button>
-        <button class="btn-danger" (click)="confirmDelete()">Yes</button>
+        <button class="btn-secondary" (click)="cancelDelete()">Cancel</button>
+        <button class="btn-danger" (click)="confirmDelete()">Delete</button>
       </div>
     </div>
   </div>
@@ -104,9 +242,33 @@
       <p>Group · {{ groupMembers.length }} members</p>
     </div>
     <div class="modal-body">
+      <h3 class="section-title">Members</h3>
       <div *ngFor="let member of groupMembers" class="member-item">
-        <img [src]="'https://ui-avatars.com/api/?name=' + member.name" class="member-pic">
-        <span>{{ member.name }}</span>
+        <img [src]="member.avatar" class="member-pic">
+        <div class="member-info">
+          <span class="member-name">{{ member.name }}</span>
+          <span class="member-status">{{ member.status }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Starred Messages Modal -->
+<div *ngIf="isStarredMessagesOpen" class="modal-overlay" (click)="isStarredMessagesOpen = false">
+  <div class="starred-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Starred Messages</h2>
+      <button class="close-modal" (click)="isStarredMessagesOpen = false">×</button>
+    </div>
+    <div class="modal-body">
+      <div *ngIf="starredMessages.length === 0" class="empty-state">
+        <p>No starred messages yet</p>
+      </div>
+      <div *ngFor="let msg of starredMessages" class="starred-message-item">
+        <p class="starred-sender">{{ msg.sender }}</p>
+        <p class="starred-content">{{ msg.content }}</p>
+        <p class="starred-time">{{ msg.time }}</p>
       </div>
     </div>
   </div>
