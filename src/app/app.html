@@ -3,149 +3,111 @@
     <div class="header-content" (click)="performHeaderAction('About')">
       <img src="https://ui-avatars.com/api/?name=Public+Group&background=00a884&color=fff" alt="Profile" class="profile-pic">
       <div class="header-text">
-        <h3>{{ chatPartner }}</h3>
+        <h3 class="group-name">{{ chatPartner }}</h3>
         <p class="header-subtext">You, John Doe, Jane Smith...</p>
       </div>
     </div>
     
     <div class="header-options">
-      <button class="icon-btn" (click)="toggleHeaderMenu(); $event.stopPropagation()">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-          <path d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 15z"/>
-        </svg>
+      <button class="three-dots-btn" (click)="toggleHeaderMenu(); $event.stopPropagation()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 15z"/></svg>
       </button>
-
-      <div *ngIf="isHeaderMenuOpen" class="dropdown-menu">
-        <div class="menu-item" (click)="performHeaderAction('About')">Group Info</div>
+      <div *ngIf="isHeaderMenuOpen" class="dropdown-menu" (click)="$event.stopPropagation()">
+        <div class="menu-item" (click)="performHeaderAction('About')">About</div>
         <div class="menu-item" (click)="performHeaderAction('Search')">Search</div>
-        <div class="menu-item" (click)="clearChat()">Clear Chat</div>
-        <div class="menu-item" (click)="performHeaderAction('Starred Text')">Starred Messages</div>
+        <div class="menu-item" (click)="performHeaderAction('Clear Chat')">Clear Chat</div>
       </div>
     </div>
   </div>
 
-  <div id="messageArea" class="message-area" (click)="isEmojiPickerOpen = false">
-    <div *ngFor="let msg of messages" 
-         [ngClass]="msg.messageClass" 
-         (contextmenu)="openContextMenu($event, msg)">
-      
-      <div *ngIf="msg.type === 'JOIN'" class="notification">
-        {{ msg.sender }} joined the chat.
-      </div>
-
-      <ng-container *ngIf="msg.type === 'CHAT'">
-        <div *ngIf="msg.messageClass === 'other-message'" class="avatar-container">
-          <img [src]="'https://ui-avatars.com/api/?name=' + msg.sender + '&background=random'" class="profile-pic">
-        </div>
+  <div id="messageArea" class="message-area">
+    <div *ngFor="let msg of messages" [ngClass]="msg.messageClass" (contextmenu)="openContextMenu($event, msg)">
+      <div class="message-bubble">
+        <input *ngIf="msg.isEditing" 
+               class="inline-edit-input"
+               [(ngModel)]="msg.content" 
+               (keyup.enter)="saveInlineEdit(msg, msg.content)"
+               (blur)="saveInlineEdit(msg, msg.content)"
+               autoFocus>
         
-        <div class="message-bubble">
-          <div *ngIf="!msg.isEditing" class="message-content">{{ msg.content }}</div>
-          
-          <input *ngIf="msg.isEditing" 
-       class="inline-edit-input"
-       [(ngModel)]="msg.content" 
-       name="editMsg"
-       (keyup.enter)="saveInlineEdit(msg, msg.content)"
-       (blur)="saveInlineEdit(msg, msg.content)"
-       autoFocus>
-
-          <div class="message-meta">
-            <span class="message-time">{{ msg.time }}</span>
-            <span *ngIf="msg.messageClass === 'my-message'" class="status-ticks seen">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                <path d="M0.41 13.41L6 19L7.41 17.59L1.83 12L0.41 13.41ZM22.24 5.58L11.66 16.17L7.5 12L6.08 13.42L11.66 19L23.66 7L22.24 5.58ZM18 7L16.59 5.58L10.24 11.93L11.66 13.34L18 7Z"/>
-              </svg>
-            </span>
-          </div>
+        <div *ngIf="!msg.isEditing" class="message-content">{{ msg.content }}</div>
+        <div class="message-meta">
+          <span class="message-time">{{ msg.time }}</span>
         </div>
-      </ng-container>
+      </div>
     </div>
   </div>
 
+  <!-- Context Menu for Right Click -->
+  <div *ngIf="isMenuVisible" 
+       class="context-menu" 
+       [style.left.px]="menuX" 
+       [style.top.px]="menuY"
+       (click)="$event.stopPropagation()">
+    <div class="menu-item" (click)="startInlineEdit(selectedMessage)">Edit Message</div>
+    <div class="menu-item delete-option" (click)="triggerDeleteConfirm()">Delete Message</div>
+  </div>
+
+  <!-- Emoji Picker -->
+  <div *ngIf="isEmojiPickerOpen" class="emoji-picker" (click)="$event.stopPropagation()">
+    <div class="emoji-grid">
+      <span *ngFor="let emoji of emojis" class="emoji-item" (click)="addEmoji(emoji)">{{ emoji }}</span>
+    </div>
+  </div>
+
+  <!-- Message Input Area -->
   <div class="message-input-area">
     <div class="input-container">
       <div class="input-pill">
-        <button class="icon-btn" (click)="isEmojiPickerOpen = !isEmojiPickerOpen; $event.stopPropagation()">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
-          </svg>
+        <button class="action-icon emoji-btn" (click)="isEmojiPickerOpen = !isEmojiPickerOpen; $event.stopPropagation()">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
         </button>
-        
-        <div *ngIf="isEmojiPickerOpen" class="emoji-picker">
-          <span (click)="addEmoji('😂')">😂</span>
-          <span (click)="addEmoji('❤️')">❤️</span>
-          <span (click)="addEmoji('👍')">👍</span>
-          <span (click)="addEmoji('🔥')">🔥</span>
-        </div>
-
         <form (submit)="sendMessage(); $event.preventDefault()" class="message-form">
-          <input id="messageInput" 
-                 [(ngModel)]="newMessage" 
-                 name="msg" 
-                 placeholder="Message" 
-                 autocomplete="off">
+          <input id="messageInput" [(ngModel)]="newMessage" name="msg" placeholder="Message" autocomplete="off">
         </form>
-
-        <div class="media-actions">
-          <button class="icon-btn" (click)="triggerFileSelect()">
-            <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.5" fill="none">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path>
-            </svg>
+        <div class="media-group">
+          <button class="action-icon attach-btn" (click)="triggerFileSelect()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path></svg>
           </button>
-          <input type="file" id="fileInput" style="display:none" (change)="onFileSelected($event)">
-
-          <button class="icon-btn" (click)="openCamera()">
-            <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.5" fill="none">
-              <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"></path>
-              <circle cx="12" cy="13" r="4"></circle>
-            </svg>
+          <input type="file" id="fileInput" style="display: none;" (change)="handleFileSelect($event)">
+          <button class="action-icon camera-btn" (click)="openCamera()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
           </button>
         </div>
       </div>
-
-      <button id="sendButton" (click)="newMessage ? sendMessage() : null">
-        <svg *ngIf="newMessage" viewBox="0 0 24 24" width="24" height="24" fill="white">
-          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
-        </svg>
-        <svg *ngIf="!newMessage" viewBox="0 0 24 24" width="24" height="24" fill="white">
-          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"></path>
-          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"></path>
-        </svg>
+      <button id="sendButton" (click)="sendMessage()">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
       </button>
     </div>
   </div>
 </div>
 
-<div *ngIf="isAboutModalOpen" class="modal-overlay" (click)="isAboutModalOpen = false">
-  <div class="about-modal" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <button class="close-btn" (click)="isAboutModalOpen = false">✕</button>
-      <h3>Group Info</h3>
-    </div>
+<!-- Delete Confirmation Modal -->
+<div *ngIf="isDeleteModalOpen" class="modal-overlay" (click)="isDeleteModalOpen = false">
+  <div class="confirm-modal" (click)="$event.stopPropagation()">
     <div class="modal-body">
-      <div class="group-profile-section">
-        <img src="https://ui-avatars.com/api/?name=Public+Group&background=00a884&color=fff" class="large-profile-pic">
-        <h2>{{ chatPartner }}</h2>
-        <p>Group · {{ groupMembers.length }} members</p>
-      </div>
-      <div class="members-list">
-        <h4>Members</h4>
-        <div *ngFor="let member of groupMembers" class="member-item">
-          <img [src]="'https://ui-avatars.com/api/?name=' + member.name + '&background=random'" class="member-pic">
-          <div class="member-info">
-            <span class="member-name">{{ member.name }}</span>
-            <span class="member-status">{{ member.status }}</span>
-          </div>
-        </div>
+      <p>Do you want to delete the message?</p>
+      <div class="modal-actions">
+        <button class="btn-secondary" (click)="cancelDelete()">No</button>
+        <button class="btn-danger" (click)="confirmDelete()">Yes</button>
       </div>
     </div>
   </div>
 </div>
 
-<div *ngIf="isMenuVisible" 
-     class="context-menu" 
-     [style.left.px]="menuX" 
-     [style.top.px]="menuY">
-  <div class="menu-item" (click)="startInlineEdit(selectedMessage)">Edit Message</div>
-  <div class="menu-item delete" (click)="deleteMsg()">Delete Message</div>
+<!-- About Modal -->
+<div *ngIf="isAboutModalOpen" class="modal-overlay" (click)="isAboutModalOpen = false">
+  <div class="about-modal" (click)="$event.stopPropagation()">
+    <div class="group-profile-section">
+      <img src="https://ui-avatars.com/api/?name=Public+Group&background=00a884&color=fff" class="large-profile-pic">
+      <h2>{{ chatPartner }}</h2>
+      <p>Group · {{ groupMembers.length }} members</p>
+    </div>
+    <div class="modal-body">
+      <div *ngFor="let member of groupMembers" class="member-item">
+        <img [src]="'https://ui-avatars.com/api/?name=' + member.name" class="member-pic">
+        <span>{{ member.name }}</span>
+      </div>
+    </div>
+  </div>
 </div>

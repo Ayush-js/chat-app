@@ -22,12 +22,16 @@ export class AppComponent implements OnInit {
   isMenuVisible = false;      
   isHeaderMenuOpen = false;   
   isEmojiPickerOpen = false;  
-  isAboutModalOpen = false;   // NEW: For Group Info/About
+  isAboutModalOpen = false;   
+  isDeleteModalOpen = false;
+  
   menuX = 0;
   menuY = 0;
   selectedMessage: any = null;
 
-  // NEW: Mock data for Group Members
+  // Emoji list
+  emojis = ['😀', '😂', '😍', '🥰', '😎', '😢', '😭', '😡', '🤔', '👍', '👎', '❤️', '🔥', '✨', '🎉', '💯'];
+
   groupMembers = [
     { name: 'You', status: 'Online' },
     { name: 'John Doe', status: 'Away' },
@@ -39,59 +43,87 @@ export class AppComponent implements OnInit {
     this.connect();
   }
 
-  // --- Header Actions Update ---
+  // --- Header Actions ---
   toggleHeaderMenu() {
     this.isHeaderMenuOpen = !this.isHeaderMenuOpen;
   }
 
   performHeaderAction(action: string) {
     if (action === 'About') {
-      this.isAboutModalOpen = true; // Open the info modal
+      this.isAboutModalOpen = true; 
     } else if (action === 'Search') {
       alert("Search feature coming soon!");
-    } else if (action === 'Starred Text') {
-      alert("No starred messages yet.");
+    } else if (action === 'Clear Chat') {
+      this.clearChat();
     }
     this.isHeaderMenuOpen = false;
   }
 
-  // --- Global Click Listener Update ---
+  // --- Global Click Listener ---
   @HostListener('document:click', ['$event'])
   closeMenus(event: MouseEvent) {
     const target = event.target as HTMLElement;
 
-    if (!target.closest('.context-menu')) this.isMenuVisible = false;
+    // Close right-click menu if clicking elsewhere
+    if (!target.closest('.context-menu')) {
+      this.isMenuVisible = false;
+    }
     
-    // Close 3-dot menu if clicking outside
-    if (!target.closest('.header-options')) this.isHeaderMenuOpen = false;
+    // Close 3-dot header menu
+    if (!target.closest('.header-options')) {
+      this.isHeaderMenuOpen = false;
+    }
 
-    // Close emoji picker if clicking outside
-    if (!target.closest('.emoji-picker') && !target.closest('.icon-btn')) {
+    // Close emoji picker
+    if (!target.closest('.emoji-picker') && !target.closest('.emoji-btn')) {
       this.isEmojiPickerOpen = false;
     }
 
-    // NEW: Close About Modal if clicking the backdrop (overlay)
+    // Close modals if clicking the backdrop (overlay)
     if (target.classList.contains('modal-overlay')) {
       this.isAboutModalOpen = false;
+      this.isDeleteModalOpen = false;
     }
   }
 
-  // --- Rest of your existing logic (sendMessage, connect, etc.) ---
+  // --- Message Logic ---
   sendMessage() {
     if (this.newMessage && this.newMessage.trim() !== "") {
       const now = new Date();
-      this.messages.push({
+      const message = {
         sender: this.username,
         content: this.newMessage,
         type: 'CHAT',
         messageClass: 'my-message',
         time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isEditing: false
-      });
+      };
+      
+      this.messages.push(message);
+      
+      // Send via WebSocket if connected
+      if (this.stompClient && this.stompClient.connected) {
+        this.stompClient.send("/app/chat.sendMessage", {}, JSON.stringify({
+          sender: this.username,
+          content: this.newMessage,
+          type: 'CHAT'
+        }));
+      }
+      
       this.newMessage = ''; 
       this.scrollToBottom();
       this.isEmojiPickerOpen = false;
     }
+  }
+
+  // --- Edit & Delete Logic ---
+  
+  openContextMenu(event: MouseEvent, msg: any) {
+    event.preventDefault();
+    this.selectedMessage = msg;
+    this.menuX = event.clientX;
+    this.menuY = event.clientY;
+    this.isMenuVisible = true;
   }
 
   startInlineEdit(msg: any) {
@@ -100,58 +132,67 @@ export class AppComponent implements OnInit {
   }
 
   saveInlineEdit(msg: any, newContent: string) {
-    if (newContent.trim() !== "") msg.content = newContent;
+    if (newContent && newContent.trim() !== "") {
+      msg.content = newContent;
+    }
     msg.isEditing = false;
   }
 
-  cancelEdit(msg: any) { msg.isEditing = false; }
+  triggerDeleteConfirm() {
+    this.isMenuVisible = false;
+    this.isDeleteModalOpen = true;
+  }
 
+  confirmDelete() {
+    if (this.selectedMessage) {
+      this.messages = this.messages.filter(m => m !== this.selectedMessage);
+    }
+    this.isDeleteModalOpen = false;
+    this.selectedMessage = null;
+  }
+
+  cancelDelete() {
+    this.isDeleteModalOpen = false;
+    this.selectedMessage = null;
+  }
+
+  // --- Utility Methods ---
   clearChat() {
     this.messages = [];
     this.isHeaderMenuOpen = false;
   }
 
-  addEmoji(emoji: string) { this.newMessage += emoji; }
+  addEmoji(emoji: string) { 
+    this.newMessage += emoji;
+    this.isEmojiPickerOpen = false;
+  }
 
-  triggerFileSelect() { document.getElementById('fileInput')?.click(); }
+  triggerFileSelect() { 
+    const fileInput = document.getElementById('fileInput') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.click();
+    }
+  }
 
-  onFileSelected(event: any) {
+  handleFileSelect(event: any) {
     const file = event.target.files[0];
     if (file) {
-      const now = new Date();
-      this.messages.push({
-        sender: this.username,
-        content: `Attached File: ${file.name}`,
-        type: 'CHAT',
-        messageClass: 'my-message',
-        time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isFile: true
-      });
-      this.scrollToBottom();
+      alert(`File selected: ${file.name}`);
+      // Here you can add file upload logic
     }
   }
 
   async openCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      alert("Camera accessed!");
+      alert("Camera accessed! (Feature in development)");
       stream.getTracks().forEach(track => track.stop());
-    } catch (err) { alert("Camera error."); }
+    } catch (err) { 
+      alert("Camera access denied or not available."); 
+    }
   }
 
-  openContextMenu(event: MouseEvent, msg: any) {
-    event.preventDefault();
-    this.isMenuVisible = true;
-    this.menuX = event.clientX;
-    this.menuY = event.clientY;
-    this.selectedMessage = msg;
-  }
-
-  deleteMsg() {
-    this.messages = this.messages.filter(m => m !== this.selectedMessage);
-    this.isMenuVisible = false;
-  }
-
+  // --- WebSocket Logic ---
   connect() {
     const socket = new (SockJS as any)('http://localhost:8080/ws'); 
     this.stompClient = Stomp.over(socket);
