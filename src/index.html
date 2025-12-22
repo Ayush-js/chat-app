@@ -2,12 +2,37 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>ChatApp</title>
+  <title>ChatApp | Public Group</title>
   <base href="/">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
+
+  <meta name="theme-color" content="#121212">
+  
+  <script>
+    if (typeof global === 'undefined') {
+      var global = window;
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    /* Prevents the 'bounce' effect on mobile and ensures full height */
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background-color: #121212; /* Matches your :host background */
+    }
+  </style>
 </head>
 <body>
-  <app-root></app-root>
+  <app-root></app-root> 
 </body>
 </html>

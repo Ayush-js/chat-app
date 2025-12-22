@@ -1,0 +1,221 @@
+:root {
+    --chat-bg: #0b141a; /* WhatsApp Dark BG */
+    --chat-border: #222d34;
+    --header-bg: #202c33;
+    --header-border: #222d34;
+    --text-color-light: #e9edef;
+    --text-color-muted: #8696a0;
+    --my-message-color: #005c4b; /* WhatsApp My Message Green */
+    --other-message-color: #202c33; /* WhatsApp Other Message Gray */
+    --input-bg: #2a3942;
+    --send-btn-color: #00a884; /* WhatsApp Teal */
+    --tick-blue: #53bdeb;
+}
+
+:host {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100vw;
+    height: 100vh;
+    background-color: #111b21;
+    font-family: 'Poppins', sans-serif;
+}
+
+.chat-container {
+    width: 420px;
+    height: 85vh;
+    background-color: var(--chat-bg);
+    border-radius: 0; /* WhatsApp mobile usually has sharp corners or slight rounding */
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+/* --- HEADER: Subtext & Profile --- */
+.chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background-color: var(--header-bg);
+    z-index: 10;
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.header-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.header-text h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text-color-light);
+    font-weight: 500;
+}
+
+.header-subtext {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-color-muted);
+}
+
+.profile-pic {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* --- MESSAGE AREA: Doodle Background --- */
+.message-area {
+    flex-grow: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    /* This URL is the official-style WhatsApp doodle pattern */
+    background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+    background-repeat: repeat;
+    background-size: 400px;
+    background-blend-mode: overlay;
+    background-color: var(--chat-bg);
+}
+
+.message-bubble {
+    padding: 6px 10px 4px 12px;
+    border-radius: 8px;
+    max-width: 85%;
+    font-size: 14.5px;
+    position: relative;
+    box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
+}
+
+.my-message { align-self: flex-end; }
+.my-message .message-bubble { background-color: var(--my-message-color); color: #e9edef; }
+
+.other-message { align-self: flex-start; }
+.other-message .message-bubble { background-color: var(--other-message-color); color: #e9edef; }
+
+/* Meta data inside bubble (Time + Ticks) */
+.message-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: 2px;
+}
+
+.message-time {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.status-ticks {
+    display: flex;
+    align-items: center;
+}
+
+.status-ticks.seen {
+    color: var(--tick-blue);
+}
+
+/* --- THE PILL INPUT AREA --- */
+.message-input-area {
+    padding: 10px;
+    background-color: var(--header-bg);
+}
+
+.input-container {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.input-pill {
+    flex-grow: 1;
+    background-color: var(--input-bg);
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    min-height: 48px;
+}
+
+.message-form { flex-grow: 1; }
+
+#messageInput {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: white;
+    padding: 12px 8px;
+    outline: none;
+    font-size: 15px;
+}
+
+.media-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Float Send Button */
+#sendButton {
+    background-color: var(--send-btn-color);
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform 0.1s;
+}
+
+#sendButton:active { transform: scale(0.9); }
+
+/* Context Menu Styling */
+.context-menu {
+    position: fixed;
+    background: var(--header-bg);
+    border: 1px solid #3b4a54;
+    border-radius: 8px;
+    min-width: 180px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    z-index: 1000;
+    padding: 8px 0;
+}
+
+.menu-item {
+    padding: 12px 20px;
+    color: var(--text-color-light);
+    cursor: pointer;
+}
+
+.menu-item:hover { background: #2a3942; }
+
+/* Emoji Picker styling */
+.emoji-picker {
+    position: absolute;
+    bottom: 70px;
+    left: 10px;
+    background: var(--header-bg);
+    border: 1px solid #3b4a54;
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    gap: 15px;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+}
