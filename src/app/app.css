@@ -129,7 +129,7 @@
 .three-dots-btn svg {
     width: 20px;
     height: 20px;
-    fill: var(--icon-color);
+    fill: white;
 }
 
 /* Dropdown Menu */
@@ -239,8 +239,8 @@
 }
 
 .my-message .message-bubble { 
-    background-color: #005c4b;
-    color: #ffffff;
+    background-color: var(--my-msg);
+    color: white;
     border-radius: 8px 8px 0 8px;
 }
 
@@ -369,11 +369,6 @@
 .message-content {
     margin-bottom: 2px;
     line-height: 1.4;
-    color: inherit;
-}
-
-.my-message .message-content {
-    color: #ffffff;
 }
 
 /* Message Reactions */
@@ -419,14 +414,6 @@
 
 .message-time {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.my-message .message-time {
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.other-message .message-time {
     color: rgba(255, 255, 255, 0.5);
 }
 
