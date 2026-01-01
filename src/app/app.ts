@@ -1,4 +1,4 @@
-import { Component, OnInit, HostListener, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, HostListener, ViewChild, ElementRef, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import SockJS from 'sockjs-client'; 
@@ -30,10 +30,21 @@ interface Message {
   templateUrl: './app.html',
   styleUrl: './app.css'
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
   @ViewChild('messageArea') messageArea!: ElementRef;
   
+  // WebSocket Configuration
   private stompClient: CompatClient | null = null;
+  private readonly WS_ENDPOINT = 'http://localhost:8080/ws'; // Change this to your backend URL
+  private reconnectAttempts = 0;
+  private readonly MAX_RECONNECT_ATTEMPTS = 5;
+  private reconnectInterval = 3000; // 3 seconds
+  
+  // Connection Status
+  isConnected = false;
+  connectionError = false;
+  connectionMessage = 'Connecting...';
+  
   username: string = "User_" + Math.floor(Math.random() * 1000);
   chatPartner: string = "Public Group";
   newMessage: string = '';
@@ -75,6 +86,221 @@ export class AppComponent implements OnInit {
     this.simulateTyping();
   }
 
+  ngOnDestroy() {
+    this.disconnect();
+  }
+
+  // --- WebSocket Connection Logic ---
+  connect() {
+    try {
+      this.connectionMessage = 'Connecting to server...';
+      this.connectionError = false;
+      
+      console.log(`Attempting to connect to: ${this.WS_ENDPOINT}`);
+      
+      const socket = new (SockJS as any)(this.WS_ENDPOINT);
+      this.stompClient = Stomp.over(socket);
+      
+      // Disable debug logging in production
+      this.stompClient.debug = (str: string) => {
+        console.log('STOMP: ' + str);
+      };
+      
+      // Use arrow functions to preserve 'this' context
+      this.stompClient.connect(
+        {},
+        () => {
+          this.onConnected();
+        },
+        (error: any) => {
+          this.onError(error);
+        }
+      );
+    } catch (error) {
+      console.error('Failed to create WebSocket connection:', error);
+      this.handleConnectionError(error);
+    }
+  }
+
+  onConnected(frame?: any): void {
+    console.log('✅ Connected to WebSocket server', frame);
+    this.isConnected = true;
+    this.connectionError = false;
+    this.connectionMessage = 'Connected';
+    this.reconnectAttempts = 0;
+    
+    // Subscribe to the public chat topic (must match backend @SendTo)
+    this.stompClient?.subscribe('/topic/public', (payload: IMessage) => {
+      this.onMessageReceived(payload);
+    });
+    
+    // Send JOIN message to notify others
+    this.stompClient?.send(
+      "/app/chat.addUser",
+      {},
+      JSON.stringify({ sender: this.username, type: 'JOIN' })
+    );
+    
+    // Show success notification
+    this.showNotification(`Connected as ${this.username}`, 'success');
+  }
+
+  onError(error: any): void {
+    console.error('❌ WebSocket connection error:', error);
+    this.handleConnectionError(error);
+  }
+
+  handleConnectionError(error: any) {
+    this.isConnected = false;
+    this.connectionError = true;
+    
+    if (this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
+      this.reconnectAttempts++;
+      this.connectionMessage = `Connection failed. Retrying (${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS})...`;
+      
+      console.log(`Reconnect attempt ${this.reconnectAttempts} in ${this.reconnectInterval}ms`);
+      
+      setTimeout(() => {
+        this.connect();
+      }, this.reconnectInterval);
+      
+      // Exponential backoff
+      this.reconnectInterval = Math.min(this.reconnectInterval * 1.5, 30000);
+    } else {
+      this.connectionMessage = 'Unable to connect to server. Please check if the backend is running.';
+      this.showNotification('Connection failed. Please refresh the page.', 'error');
+    }
+  }
+
+  disconnect() {
+    if (this.stompClient && this.stompClient.connected) {
+      // Send LEAVE message
+      this.stompClient.send(
+        "/app/chat.addUser",
+        {},
+        JSON.stringify({ sender: this.username, type: 'LEAVE' })
+      );
+      
+      this.stompClient.disconnect(() => {
+        console.log('Disconnected from WebSocket');
+      });
+    }
+    this.isConnected = false;
+  }
+
+  // --- Message Handling ---
+  onMessageReceived(payload: any) {
+    try {
+      const message = JSON.parse(payload.body);
+      
+      // Don't show our own messages (already added when sending)
+      if (message.sender === this.username && message.type === 'CHAT') {
+        return;
+      }
+      
+      const now = new Date();
+      const formattedMessage: Message = {
+        ...message,
+        time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        date: now,
+        messageClass: message.type === 'JOIN' || message.type === 'LEAVE' ? 'notification' : 'other-message',
+        status: 'delivered',
+        reactions: {},
+        isEditing: false
+      };
+      
+      // Handle JOIN/LEAVE messages differently
+      if (message.type === 'JOIN') {
+        formattedMessage.content = `${message.sender} joined the chat`;
+      } else if (message.type === 'LEAVE') {
+        formattedMessage.content = `${message.sender} left the chat`;
+      }
+      
+      this.messages.push(formattedMessage);
+      this.scrollToBottom();
+      
+      // Play notification sound for new messages
+      this.playNotificationSound();
+      
+    } catch (error) {
+      console.error('Error processing received message:', error);
+    }
+  }
+
+  sendMessage() {
+    if (!this.newMessage || this.newMessage.trim() === "") {
+      return;
+    }
+    
+    if (!this.isConnected) {
+      this.showNotification('Not connected to server. Please wait...', 'error');
+      return;
+    }
+    
+    const now = new Date();
+    const message: Message = {
+      sender: this.username,
+      content: this.newMessage,
+      type: 'CHAT',
+      messageClass: 'my-message',
+      time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: now,
+      isEditing: false,
+      status: 'sending',
+      replyTo: this.replyingTo,
+      reactions: {}
+    };
+    
+    // Add message to UI immediately
+    this.messages.push(message);
+    
+    try {
+      // Send to server
+      this.stompClient?.send(
+        "/app/chat.sendMessage",
+        {},
+        JSON.stringify({
+          sender: this.username,
+          content: this.newMessage,
+          type: 'CHAT'
+        })
+      );
+      
+      // Simulate message status progression
+      setTimeout(() => message.status = 'sent', 300);
+      setTimeout(() => message.status = 'delivered', 800);
+      setTimeout(() => message.status = 'read', 2000);
+      
+    } catch (error) {
+      console.error('Error sending message:', error);
+      message.status = 'sent'; // Show as sent even if there's an error
+      this.showNotification('Message may not have been sent', 'error');
+    }
+    
+    this.newMessage = '';
+    this.replyingTo = null;
+    this.scrollToBottom();
+    this.isEmojiPickerOpen = false;
+  }
+
+  // --- Notification Helper ---
+  showNotification(message: string, type: 'success' | 'error' | 'info' = 'info') {
+    // You can implement a toast notification system here
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    
+    // Simple alert for now (replace with better UI later)
+    if (type === 'error') {
+      // Only show error alerts
+      // alert(message);
+    }
+  }
+
+  playNotificationSound() {
+    // Optional: Play a sound when receiving messages
+    // const audio = new Audio('assets/notification.mp3');
+    // audio.play().catch(e => console.log('Could not play sound'));
+  }
+
   // --- Simulate typing indicator ---
   simulateTyping() {
     setInterval(() => {
@@ -93,7 +319,7 @@ export class AppComponent implements OnInit {
 
   performHeaderAction(action: string) {
     if (action === 'About') {
-      this.isAboutModalOpen = true; 
+      this.isAboutModalOpen = true;
     } else if (action === 'Search') {
       this.isSearchOpen = !this.isSearchOpen;
       this.searchQuery = '';
@@ -108,7 +334,7 @@ export class AppComponent implements OnInit {
   // --- Search Messages ---
   get filteredMessages() {
     if (!this.searchQuery.trim()) return this.messages;
-    return this.messages.filter(m => 
+    return this.messages.filter(m =>
       m.content.toLowerCase().includes(this.searchQuery.toLowerCase())
     );
   }
@@ -131,7 +357,7 @@ export class AppComponent implements OnInit {
     if (!target.closest('.context-menu')) {
       this.isMenuVisible = false;
     }
-    
+
     if (!target.closest('.header-options')) {
       this.isHeaderMenuOpen = false;
     }
@@ -166,46 +392,6 @@ export class AppComponent implements OnInit {
         this.showScrollButton = false;
       }
     }, 100);
-  }
-
-  // --- Message Logic ---
-  sendMessage() {
-    if (this.newMessage && this.newMessage.trim() !== "") {
-      const now = new Date();
-      const message: Message = {
-        sender: this.username,
-        content: this.newMessage,
-        type: 'CHAT',
-        messageClass: 'my-message',
-        time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        date: now,
-        isEditing: false,
-        status: 'sending',
-        replyTo: this.replyingTo,
-        reactions: {}
-      };
-      
-      this.messages.push(message);
-      
-      // Simulate message status progression
-      setTimeout(() => message.status = 'sent', 500);
-      setTimeout(() => message.status = 'delivered', 1500);
-      setTimeout(() => message.status = 'read', 3000);
-      
-      // Send via WebSocket if connected
-      if (this.stompClient && this.stompClient.connected) {
-        this.stompClient.send("/app/chat.sendMessage", {}, JSON.stringify({
-          sender: this.username,
-          content: this.newMessage,
-          type: 'CHAT'
-        }));
-      }
-      
-      this.newMessage = ''; 
-      this.replyingTo = null;
-      this.scrollToBottom();
-      this.isEmojiPickerOpen = false;
-    }
   }
 
   // --- Reply Feature ---
@@ -245,7 +431,7 @@ export class AppComponent implements OnInit {
   addReaction(msg: Message, emoji: string) {
     if (!msg.reactions) msg.reactions = {};
     if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
-    
+
     const userIndex = msg.reactions[emoji].indexOf(this.username);
     if (userIndex > -1) {
       msg.reactions[emoji].splice(userIndex, 1);
@@ -311,25 +497,27 @@ export class AppComponent implements OnInit {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    
+
     if (date.toDateString() === today.toDateString()) return 'Today';
     if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    
+
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   // --- Utility Methods ---
   clearChat() {
-    this.messages = [];
-    this.isHeaderMenuOpen = false;
+    if (confirm('Are you sure you want to clear all messages?')) {
+      this.messages = [];
+      this.isHeaderMenuOpen = false;
+    }
   }
 
-  addEmoji(emoji: string) { 
+  addEmoji(emoji: string) {
     this.newMessage += emoji;
     this.isEmojiPickerOpen = false;
   }
 
-  triggerFileSelect() { 
+  triggerFileSelect() {
     const fileInput = document.getElementById('fileInput') as HTMLInputElement;
     if (fileInput) {
       fileInput.click();
@@ -339,7 +527,6 @@ export class AppComponent implements OnInit {
   handleFileSelect(event: any) {
     const file = event.target.files[0];
     if (file) {
-      // Simulate file message
       const reader = new FileReader();
       reader.onload = (e: any) => {
         const now = new Date();
@@ -368,8 +555,8 @@ export class AppComponent implements OnInit {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       alert("Camera accessed! (Feature in development)");
       stream.getTracks().forEach(track => track.stop());
-    } catch (err) { 
-      alert("Camera access denied or not available."); 
+    } catch (err) {
+      alert("Camera access denied or not available.");
     }
   }
 
@@ -390,33 +577,6 @@ export class AppComponent implements OnInit {
       reactions: {}
     };
     this.messages.push(voiceMsg);
-    this.scrollToBottom();
-  }
-
-  // --- WebSocket Logic ---
-  connect() {
-    const socket = new (SockJS as any)('http://localhost:8080/ws'); 
-    this.stompClient = Stomp.over(socket);
-    this.stompClient.connect({}, () => this.onConnected(), (err: any) => console.error(err));
-  }
-
-  onConnected() {
-    this.stompClient?.subscribe('/topic/public-chat', (payload: IMessage) => this.onMessageReceived(payload));
-    this.stompClient?.send("/app/chat.addUser", {}, JSON.stringify({ sender: this.username, type: 'JOIN' }));
-  }
-
-  onMessageReceived(payload: any) {
-    const message = JSON.parse(payload.body);
-    if (message.sender === this.username && message.type === 'CHAT') return;
-    const now = new Date();
-    this.messages.push({
-      ...message,
-      time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      date: now,
-      messageClass: message.type === 'JOIN' ? 'notification' : 'other-message',
-      status: 'delivered',
-      reactions: {}
-    });
     this.scrollToBottom();
   }
 

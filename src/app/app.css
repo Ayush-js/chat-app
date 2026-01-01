@@ -181,9 +181,11 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
+    background-color: #0b141a;
     background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
     background-blend-mode: overlay;
+    background-size: cover;
     position: relative;
 }
 
@@ -207,7 +209,7 @@
     display: flex;
     justify-content: flex-end;
     width: 100%;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .other-message { 
@@ -216,7 +218,7 @@
     justify-content: flex-start;
     width: 100%;
     gap: 8px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .message-avatar {
@@ -236,18 +238,19 @@
     position: relative;
     word-wrap: break-word;
     display: inline-block;
+    box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
 }
 
 .my-message .message-bubble { 
-    background-color: var(--my-msg);
+    background-color: #005c4b;
     color: white;
     border-radius: 8px 8px 0 8px;
 }
 
 .other-message .message-bubble { 
-    background-color: var(--other-msg);
+    background-color: #202c33;
     color: var(--text-light);
-    border-radius: 0 8px 8px 8px;
+    border-radius: 0px 7.5px 7.5px 7.5px;
 }
 
 /* Message Tail */
@@ -260,13 +263,13 @@
 
 .my-message .message-tail {
     right: -8px;
-    border-left: 8px solid var(--my-msg);
+    border-left: 8px solid #005c4b;
     border-bottom: 13px solid transparent;
 }
 
 .other-message .message-tail {
-    left: -8px;
-    border-right: 8px solid var(--other-msg);
+    left: -6px;
+    border-right: 8px solid #202c33;
     border-bottom: 13px solid transparent;
 }
 
@@ -369,6 +372,20 @@
 .message-content {
     margin-bottom: 2px;
     line-height: 1.4;
+    color: var(--text-light);
+}
+
+.my-message .message-content {
+    color: #ffffff !important;
+}
+
+.other-message .message-content {
+    color: var(--text-light);
+}
+
+/* Ensure all text in sent messages is white */
+.my-message .message-bubble * {
+    color: #ffffff !important;
 }
 
 /* Message Reactions */
@@ -404,8 +421,10 @@
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    gap: 4px;
-    margin-top: 2px;
+    gap: 3px;
+    margin-top: 1px;
+    float: right;
+    margin-left: 10px;
 }
 
 .star-icon {
@@ -414,13 +433,13 @@
 
 .message-time {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(241, 241, 242, 0.63);
 }
 
 .message-status svg {
-    width: 16px;
-    height: 15px;
-    fill: rgba(255, 255, 255, 0.5);
+    width: 15px;
+    height: 11px;
+    fill: rgba(241, 241, 242, 0.63);
 }
 
 .read-status {
