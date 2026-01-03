@@ -1,4 +1,12 @@
 <div class="chat-container">
+  <!-- CONNECTION STATUS BANNER -->
+  <div *ngIf="!isConnected || connectionError" class="connection-banner">
+    <div class="connection-status-indicator" [class.connecting]="!connectionError" [class.error]="connectionError">
+      <span class="status-dot"></span>
+      {{ connectionMessage }}
+    </div>
+  </div>
+
   <!-- HEADER -->
   <div class="chat-header">
     <div class="header-content" (click)="performHeaderAction('About')">
@@ -44,8 +52,13 @@
         <span>{{ getDateLabel(msg.date) }}</span>
       </div>
 
-      <!-- Message -->
-      <div [ngClass]="msg.messageClass" (contextmenu)="openContextMenu($event, msg)">
+      <!-- Notification Messages -->
+      <div *ngIf="msg.messageClass === 'notification'" class="notification-message">
+        {{ msg.content }}
+      </div>
+
+      <!-- Regular Messages -->
+      <div *ngIf="msg.messageClass !== 'notification'" [ngClass]="msg.messageClass" (contextmenu)="openContextMenu($event, msg)">
         <!-- Profile pic for received messages -->
         <img *ngIf="msg.messageClass === 'other-message'" 
              [src]="getSenderAvatar(msg.sender)" 
@@ -70,7 +83,7 @@
           </div>
 
           <!-- Sender name for group messages -->
-          <div *ngIf="msg.messageClass === 'other-message' && msg.type !== 'JOIN'" class="sender-name">
+          <div *ngIf="msg.messageClass === 'other-message'" class="sender-name">
             {{ msg.sender }}
           </div>
 
