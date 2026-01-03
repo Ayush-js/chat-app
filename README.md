@@ -354,9 +354,6 @@ Contributions are welcome! Here's how you can help:
 - [ ] Message search across all chats
 - [ ] Admin panel & moderation tools
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 👨‍💻 Author
 
