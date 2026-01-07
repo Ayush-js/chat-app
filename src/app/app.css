@@ -35,6 +35,7 @@
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
+
 /* === CONNECTION STATUS BANNER === */
 .connection-banner {
     background: #1f2c33;
@@ -308,8 +309,8 @@
 }
 
 .my-message .message-bubble { 
-    background-color: var(--my-msg);
-    color: white;
+    background-color: #005c4b;
+    color: #ffffff;
     border-radius: 8px 8px 0 8px;
 }
 
@@ -329,7 +330,7 @@
 
 .my-message .message-tail {
     right: -8px;
-    border-left: 8px solid var(--my-msg);
+    border-left: 8px solid #005c4b;
     border-bottom: 13px solid transparent;
 }
 

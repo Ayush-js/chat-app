@@ -62,11 +62,25 @@ export class AppComponent implements OnInit, OnDestroy {
   showScrollButton = false;
   typingUsers: string[] = [];
   
+  // Camera & Recording State
+  isCameraModalOpen = false;
+  isRecording = false;
+  recordingDuration = 0;
+  
   menuX = 0;
   menuY = 0;
   selectedMessage: any = null;
   replyingTo: any = null;
   searchQuery: string = '';
+  
+  // Camera variables
+  private cameraStream: MediaStream | null = null;
+  private cameraVideoElement: HTMLVideoElement | null = null;
+  
+  // Voice recording variables
+  private mediaRecorder: MediaRecorder | null = null;
+  private audioChunks: Blob[] = [];
+  private recordingInterval: any = null;
   
   // Emoji lists
   emojis = ['😀', '😂', '😍', '🥰', '😎', '😢', '😭', '😡', '🤔', '👍', '👎', '❤️', '🔥', '✨', '🎉', '💯'];
@@ -354,6 +368,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.isAboutModalOpen = false;
       this.isDeleteModalOpen = false;
       this.isStarredMessagesOpen = false;
+      this.closeCamera();
     }
   }
 
@@ -523,17 +538,185 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  // === CAMERA FUNCTIONALITY ===
   async openCamera(): Promise<void> {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      alert("Camera accessed! (Feature in development)");
-      stream.getTracks().forEach(track => track.stop());
-    } catch (err) {
-      alert("Camera access denied or not available.");
+      // Request camera access
+      this.cameraStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: 'user' // Use front camera
+        } 
+      });
+      
+      this.isCameraModalOpen = true;
+      
+      // Wait for DOM to render, then attach stream to video element
+      setTimeout(() => {
+        const videoElement = document.getElementById('cameraVideo') as HTMLVideoElement;
+        if (videoElement && this.cameraStream) {
+          videoElement.srcObject = this.cameraStream;
+          this.cameraVideoElement = videoElement;
+        }
+      }, 100);
+      
+    } catch (err: any) {
+      console.error('Camera access error:', err);
+      if (err.name === 'NotAllowedError') {
+        alert("Camera access denied. Please allow camera access in your browser settings.");
+      } else if (err.name === 'NotFoundError') {
+        alert("No camera found on your device.");
+      } else {
+        alert("Camera access failed: " + err.message);
+      }
     }
   }
 
-  startVoiceRecording(): void {
+  capturePhoto(): void {
+    if (!this.cameraVideoElement) return;
+    
+    // Create canvas to capture image
+    const canvas = document.createElement('canvas');
+    canvas.width = this.cameraVideoElement.videoWidth;
+    canvas.height = this.cameraVideoElement.videoHeight;
+    
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(this.cameraVideoElement, 0, 0);
+      
+      // Convert to base64
+      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      
+      // Create message with captured image
+      const now = new Date();
+      const photoMsg: Message = {
+        sender: this.username,
+        content: 'Photo',
+        type: 'CHAT',
+        messageClass: 'my-message',
+        time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        date: now,
+        isEditing: false,
+        status: 'sent',
+        mediaUrl: imageDataUrl,
+        mediaType: 'image',
+        reactions: {}
+      };
+      
+      this.messages.push(photoMsg);
+      this.scrollToBottom();
+      
+      // Close camera
+      this.closeCamera();
+    }
+  }
+
+  closeCamera(): void {
+    if (this.cameraStream) {
+      this.cameraStream.getTracks().forEach(track => track.stop());
+      this.cameraStream = null;
+    }
+    this.isCameraModalOpen = false;
+    this.cameraVideoElement = null;
+  }
+
+  // === VOICE RECORDING FUNCTIONALITY ===
+  async startVoiceRecording(): Promise<void> {
+    try {
+      // Request microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
+      
+      this.audioChunks = [];
+      this.mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm' // or 'audio/mp4' depending on browser support
+      });
+      
+      this.mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          this.audioChunks.push(event.data);
+        }
+      };
+      
+      this.mediaRecorder.onstop = () => {
+        this.handleRecordingComplete();
+      };
+      
+      // Start recording
+      this.mediaRecorder.start();
+      this.isRecording = true;
+      this.recordingDuration = 0;
+      
+      // Update duration every second
+      this.recordingInterval = setInterval(() => {
+        this.recordingDuration++;
+      }, 1000);
+      
+    } catch (err: any) {
+      console.error('Microphone access error:', err);
+      if (err.name === 'NotAllowedError') {
+        alert("Microphone access denied. Please allow microphone access in your browser settings.");
+      } else if (err.name === 'NotFoundError') {
+        alert("No microphone found on your device.");
+      } else {
+        alert("Microphone access failed: " + err.message);
+      }
+    }
+  }
+
+  stopVoiceRecording(): void {
+    if (this.mediaRecorder && this.isRecording) {
+      this.mediaRecorder.stop();
+      this.isRecording = false;
+      
+      if (this.recordingInterval) {
+        clearInterval(this.recordingInterval);
+        this.recordingInterval = null;
+      }
+      
+      // Stop all audio tracks
+      if (this.mediaRecorder.stream) {
+        this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      }
+    }
+  }
+
+  cancelVoiceRecording(): void {
+    if (this.mediaRecorder && this.isRecording) {
+      this.isRecording = false;
+      
+      if (this.recordingInterval) {
+        clearInterval(this.recordingInterval);
+        this.recordingInterval = null;
+      }
+      
+      // Stop all audio tracks without saving
+      if (this.mediaRecorder.stream) {
+        this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      }
+      
+      this.audioChunks = [];
+      this.recordingDuration = 0;
+    }
+  }
+
+  private handleRecordingComplete(): void {
+    // Create audio blob
+    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+    const audioUrl = URL.createObjectURL(audioBlob);
+    
+    // Format duration
+    const minutes = Math.floor(this.recordingDuration / 60);
+    const seconds = this.recordingDuration % 60;
+    const formattedDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    // Create voice message
     const now = new Date();
     const voiceMsg: Message = {
       sender: this.username,
@@ -545,11 +728,35 @@ export class AppComponent implements OnInit, OnDestroy {
       isEditing: false,
       status: 'sent',
       isVoiceMessage: true,
-      voiceDuration: '0:' + Math.floor(Math.random() * 60).toString().padStart(2, '0'),
+      voiceDuration: formattedDuration,
+      mediaUrl: audioUrl,
       reactions: {}
     };
+    
     this.messages.push(voiceMsg);
     this.scrollToBottom();
+    
+    // Reset
+    this.audioChunks = [];
+    this.recordingDuration = 0;
+  }
+
+  formatRecordingTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  playAudio(msg: Message): void {
+    const audioElement = document.getElementById('audio-' + msg.time) as HTMLAudioElement;
+    if (audioElement) {
+      if (audioElement.paused) {
+        audioElement.play();
+      } else {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+      }
+    }
   }
 
   getSenderAvatar(sender: string): string {
